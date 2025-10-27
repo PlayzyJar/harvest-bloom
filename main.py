@@ -1,12 +1,13 @@
 # main.py
 """
-Main application para gerenciador de Wi-Fi com display SSD1306 e teclado.
+Projeto Final - Curso Linux Embarcado
+WiFi Manager com interface GPIO para Raspberry Pi
 
-Fluxo de estados:
-- MAIN: Tela principal com informações do sistema
-- WIFI_LIST: Lista de redes disponíveis
-- PASSWORD_ENTRY: Entrada de senha
-- CONNECTING: Conectando à rede
+Fase 1: Inicialização e Interface Local
+- Exibe informações do sistema no display OLED SSD1306
+- Detecta estado da conexão Wi-Fi
+- Modo conectado: hostname, IP, sinal Wi-Fi, SSH, usuários, SSID
+- Modo desconectado: lista SSIDs disponíveis para configuração
 """
 
 import subprocess
@@ -16,11 +17,12 @@ from board import SCL, SDA
 from PIL import Image, ImageDraw, ImageFont
 import adafruit_ssd1306
 
-from libs.keyboard.keyboard import start_keyboard
+from libs.input_gpio.buttons import ButtonManager
+from libs.input_gpio.virtual_keyboard import VirtualKeyboard
 from libs.display.display_utils import (
-    draw_info_screen, draw_wifi_list, draw_password_entry,
-    draw_connecting_screen, draw_status_screen
+    draw_info_screen, draw_wifi_list
 )
+from libs.display.virtual_keyboard_display import draw_virtual_keyboard
 from utils.wifi_utils import (
     scan_wifi_networks, get_known_wifi_ssids, connect_to_wifi
 )
@@ -30,94 +32,258 @@ from utils.wifi_utils import (
 # INICIALIZAÇÃO DO HARDWARE
 # ============================================================================
 
-# Display SSD1306
-i2c = busio.I2C(SCL, SDA)
-disp = adafruit_ssd1306.SSD1306_I2C(128, 64, i2c)
-disp.fill(0)
-disp.show()
+print("Inicializando hardware...")
 
-# Imagem para desenho
+# Display SSD1306
+try:
+    i2c = busio.I2C(SCL, SDA)
+    disp = adafruit_ssd1306.SSD1306_I2C(128, 64, i2c)
+    disp.fill(0)
+    disp.show()
+    print("✓ Display inicializado")
+except Exception as e:
+    print(f"✗ Erro ao inicializar display: {e}")
+    exit(1)
+
+# Configuração da imagem
 width = disp.width
 height = disp.height
 image = Image.new("1", (width, height))
 draw = ImageDraw.Draw(image)
 
 # Fonte
-font = ImageFont.truetype("fonts/LSANS.ttf", 10)
+try:
+    font = ImageFont.truetype("fonts/LSANS.ttf", 9)
+    print("✓ Fonte carregada")
+except:
+    print("! Fonte customizada não encontrada, usando padrão")
+    font = ImageFont.load_default()
 
-# Teclado
-kb = start_keyboard('/dev/input/event0')
+# Botões GPIO
+try:
+    buttons = ButtonManager()
+    print("✓ Botões GPIO configurados")
+except Exception as e:
+    print(f"✗ Erro ao configurar botões: {e}")
+    exit(1)
+
+# Teclado virtual
+vkeyboard = VirtualKeyboard()
+print("✓ Teclado virtual inicializado")
 
 
 # ============================================================================
-# UTILITÁRIOS DO SISTEMA
+# FUNÇÕES DE COLETA DE INFORMAÇÕES DO SISTEMA
 # ============================================================================
+
+def get_wifi_signal_level():
+    """
+    Obtém nível do sinal Wi-Fi em dBm.
+
+    Retorna:
+        str: Nível do sinal (ex: "-50 dBm") ou "N/A"
+    """
+    try:
+        output = subprocess.check_output(
+            "iw dev wlan0 link | awk '/signal/ {print $2 \" dBm\"}'",
+            shell=True,
+            text=True
+        ).strip()
+        return output if output else "N/A"
+    except:
+        return "N/A"
+
+
+def check_wifi_connected():
+    """
+    Verifica se Wi-Fi está conectado.
+
+    Retorna:
+        tuple: (conectado: bool, ssid: str)
+    """
+    try:
+        ssid = subprocess.check_output(
+            "iwgetid -r",
+            shell=True,
+            text=True
+        ).strip()
+        return True, ssid
+    except:
+        return False, ""
+
 
 def get_system_info():
-    """Coleta informações do sistema para exibição."""
+    """
+    Coleta todas as informações do sistema para Fase 1.
+
+    Retorna:
+        dict: Informações do sistema
+    """
+    info = {}
+
+    # Hostname
     try:
-        host = subprocess.check_output(
-            "hostname", shell=True, text=True
+        info['host'] = subprocess.check_output(
+            "hostname",
+            shell=True,
+            text=True
         ).strip()
     except:
-        host = "N/A"
+        info['host'] = "N/A"
 
+    # IP
     try:
-        ip = subprocess.check_output(
-            "hostname -I | awk '{print $1}'", shell=True, text=True
+        info['ip'] = subprocess.check_output(
+            "hostname -I | awk '{print $1}'",
+            shell=True,
+            text=True
         ).strip()
     except:
-        ip = "N/A"
+        info['ip'] = "N/A"
 
-    try:
-        # Tenta obter SSID atual
-        ssid = subprocess.check_output(
-            "iwgetid -r", shell=True, text=True
-        ).strip()
-        wifi_status = "OK"
-    except:
-        ssid = "Desconectado"
-        wifi_status = "OFF"
+    # Wi-Fi conectado?
+    is_connected, ssid = check_wifi_connected()
+    info['wifi_connected'] = is_connected
+    info['ssid'] = ssid if is_connected else "Desconectado"
 
+    # Nível do sinal Wi-Fi
+    if is_connected:
+        info['wifi_signal'] = get_wifi_signal_level()
+        info['wifi_status'] = "Conectado"
+    else:
+        info['wifi_signal'] = "N/A"
+        info['wifi_status'] = "Desconectado"
+
+    # SSH ativo?
     try:
         ssh_result = subprocess.check_output(
-            "systemctl is-active ssh", shell=True, text=True
+            "systemctl is-active ssh",
+            shell=True,
+            text=True
         ).strip()
-        ssh_status = "ON" if ssh_result == "active" else "OFF"
+        info['ssh_status'] = "Ativo" if ssh_result == "active" else "Inativo"
     except:
-        ssh_status = "OFF"
+        info['ssh_status'] = "Inativo"
 
+    # Usuários SSH conectados
     try:
-        ssh_users = subprocess.check_output(
-            "who | grep -c 'pts/' || echo 0", shell=True, text=True
+        info['ssh_users'] = subprocess.check_output(
+            "who | grep -c 'pts/' || echo 0",
+            shell=True,
+            text=True
         ).strip()
     except:
-        ssh_users = "0"
+        info['ssh_users'] = "0"
 
-    return {
-        'host': host,
-        'ip': ip,
-        'ssid': ssid,
-        'wifi_status': wifi_status,
-        'ssh_status': ssh_status,
-        'ssh_users': ssh_users
-    }
+    return info
 
 
 # ============================================================================
-# VARIÁVEIS DE ESTADO
+# VARIÁVEIS DE ESTADO DO MENU
 # ============================================================================
 
-menu_estado = 'MAIN'
+# Estados: CHECK_WIFI, MAIN_CONNECTED, MAIN_DISCONNECTED, WIFI_LIST, PASSWORD_ENTRY, CONNECTING
+menu_estado = 'CHECK_WIFI'
 wifi_lista = []
 wifi_sel = 0
 ssid_sel = ""
-senha = ""
-sistema_info = get_system_info()
+sistema_info = {}
+last_update = 0
+UPDATE_INTERVAL = 2  # Atualiza info a cada 2 segundos
 
-# Para controlar timeout da tela de status
-status_time = 0
-STATUS_DISPLAY_TIME = 2  # Segundos que a tela de status permanece
+
+# ============================================================================
+# CALLBACKS DOS BOTÕES GPIO
+# ============================================================================
+
+def on_button_left():
+    """Botão LEFT: navega para esquerda."""
+    global wifi_sel
+
+    if menu_estado == 'WIFI_LIST':
+        if wifi_sel > 0:
+            wifi_sel -= 1
+    elif menu_estado == 'PASSWORD_ENTRY':
+        vkeyboard.move_left()
+
+
+def on_button_right():
+    """Botão RIGHT: navega para direita."""
+    global wifi_sel
+
+    if menu_estado == 'WIFI_LIST':
+        if wifi_sel < len(wifi_lista) - 1:
+            wifi_sel += 1
+    elif menu_estado == 'PASSWORD_ENTRY':
+        vkeyboard.move_right()
+
+
+def on_button_select():
+    """Botão SELECT: confirma seleção."""
+    global menu_estado, wifi_sel, ssid_sel
+
+    if menu_estado == 'MAIN_CONNECTED':
+        # Conectado: SELECT abre lista de redes (para trocar)
+        menu_estado = 'WIFI_LIST'
+        wifi_lista[:] = scan_wifi_networks()
+        wifi_sel = 0
+
+    elif menu_estado == 'MAIN_DISCONNECTED':
+        # Desconectado: SELECT abre lista de redes
+        menu_estado = 'WIFI_LIST'
+        wifi_lista[:] = scan_wifi_networks()
+        wifi_sel = 0
+
+    elif menu_estado == 'WIFI_LIST':
+        # Seleciona rede
+        if wifi_lista:
+            ssid_sel = wifi_lista[wifi_sel]
+            known_ssids = get_known_wifi_ssids()
+
+            if ssid_sel in known_ssids:
+                # Rede conhecida: conecta direto
+                menu_estado = 'CONNECTING'
+            else:
+                # Rede nova: pede senha
+                vkeyboard.reset()
+                menu_estado = 'PASSWORD_ENTRY'
+
+    elif menu_estado == 'PASSWORD_ENTRY':
+        # Confirma caractere
+        result = vkeyboard.select_char()
+        if result == 'DONE':
+            menu_estado = 'CONNECTING'
+
+
+def on_button_mode():
+    """Botão MODE: modo/voltar."""
+    global menu_estado
+
+    if menu_estado == 'WIFI_LIST':
+        # Volta para tela principal
+        menu_estado = 'CHECK_WIFI'
+
+    elif menu_estado == 'PASSWORD_ENTRY':
+        # Alterna modo do teclado
+        vkeyboard.toggle_mode()
+
+    elif menu_estado == 'MAIN_CONNECTED':
+        # Atualiza informações manualmente
+        pass
+
+
+# Configura callbacks dos botões
+buttons.set_callbacks(
+    on_left=on_button_left,
+    on_right=on_button_right,
+    on_select=on_button_select,
+    on_mode=on_button_mode
+)
+
+print("✓ Callbacks configurados")
+print("\n" + "="*50)
+print("SISTEMA INICIADO - Fase 1")
+print("="*50)
 
 
 # ============================================================================
@@ -126,148 +292,149 @@ STATUS_DISPLAY_TIME = 2  # Segundos que a tela de status permanece
 
 try:
     while True:
-        # ====== ESTADO: MAIN (Tela Principal) ======
-        if menu_estado == 'MAIN':
+        current_time = time.time()
+
+        # ====== CHECK_WIFI: Verifica estado da conexão ======
+        if menu_estado == 'CHECK_WIFI':
+            # Atualiza informações do sistema
             sistema_info = get_system_info()
 
+            # Decide próximo estado baseado na conexão
+            if sistema_info['wifi_connected']:
+                menu_estado = 'MAIN_CONNECTED'
+            else:
+                menu_estado = 'MAIN_DISCONNECTED'
+
+            last_update = current_time
+
+        # ====== MAIN_CONNECTED: Mostra informações (Wi-Fi conectado) ======
+        elif menu_estado == 'MAIN_CONNECTED':
+            # Atualiza info periodicamente
+            if current_time - last_update >= UPDATE_INTERVAL:
+                sistema_info = get_system_info()
+                last_update = current_time
+
+                # Se desconectou, muda estado
+                if not sistema_info['wifi_connected']:
+                    menu_estado = 'CHECK_WIFI'
+                    continue
+
+            # Desenha tela de informações
             draw_info_screen(
                 draw, width, height, font,
                 host=sistema_info['host'],
                 ip=sistema_info['ip'],
                 wifi_status=sistema_info['wifi_status'],
+                wifi_signal=sistema_info['wifi_signal'],
                 ssh_status=sistema_info['ssh_status'],
                 ssh_users=sistema_info['ssh_users'],
                 ssid=sistema_info['ssid']
             )
 
+            # Footer customizado
+            draw.rectangle((0, height - 9, width, height), outline=0, fill=0)
+            draw.text((0, height - 8), "SELECT: Trocar Rede",
+                      font=font, fill=255)
+
             disp.image(image)
             disp.show()
 
-            # Detecção de tecla
-            if kb.get_buffer().endswith('\x1b'):  # ESC
-                menu_estado = 'WIFI_LIST'
+        # ====== MAIN_DISCONNECTED: Mostra lista de SSIDs ======
+        elif menu_estado == 'MAIN_DISCONNECTED':
+            # Escaneia redes disponíveis
+            if not wifi_lista or current_time - last_update >= 10:
                 wifi_lista = scan_wifi_networks()
-                wifi_sel = 0
-                kb.clear_buffer()
+                last_update = current_time
 
-            time.sleep(0.1)
+            if wifi_lista:
+                # Mostra lista de redes
+                draw_wifi_list(draw, width, height, font, wifi_lista, wifi_sel)
 
-        # ====== ESTADO: WIFI_LIST (Lista de Redes) ======
+                # Footer customizado
+                draw.rectangle((0, height - 9, width, height),
+                               outline=0, fill=0)
+                draw.text((0, height - 8), "L/R:Nav SEL:Conectar",
+                          font=font, fill=255)
+            else:
+                # Nenhuma rede encontrada
+                draw.rectangle((0, 0, width, height), outline=0, fill=0)
+                draw.text((10, 20), "Nenhuma rede", font=font, fill=255)
+                draw.text((10, 30), "encontrada", font=font, fill=255)
+                draw.text((0, height - 8), "Escaneando...",
+                          font=font, fill=255)
+
+            disp.image(image)
+            disp.show()
+
+        # ====== WIFI_LIST: Lista de redes (modo conectado) ======
         elif menu_estado == 'WIFI_LIST':
             if not wifi_lista:
-                # Se lista vazia, tenta escanear novamente
                 wifi_lista = scan_wifi_networks()
 
-            draw_wifi_list(
-                draw, width, height, font,
-                wifi_lista, wifi_sel
-            )
+            draw_wifi_list(draw, width, height, font, wifi_lista, wifi_sel)
+
+            # Footer
+            draw.rectangle((0, height - 9, width, height), outline=0, fill=0)
+            draw.text((0, height - 8), "L/R:Nav SEL:Ok MODE:Back",
+                      font=font, fill=255)
 
             disp.image(image)
             disp.show()
 
-            # Navegação
-            if kb.get_buffer().endswith('\x1b[A'):  # Seta para cima
-                if wifi_sel > 0:
-                    wifi_sel -= 1
-                kb.clear_buffer()
-
-            elif kb.get_buffer().endswith('\x1b[B'):  # Seta para baixo
-                if wifi_sel < len(wifi_lista) - 1:
-                    wifi_sel += 1
-                kb.clear_buffer()
-
-            elif kb.get_buffer().endswith('\r'):  # Enter
-                ssid_sel = wifi_lista[wifi_sel]
-                known_ssids = get_known_wifi_ssids()
-
-                if ssid_sel in known_ssids:
-                    # Rede conhecida: conecta direto
-                    menu_estado = 'CONNECTING'
-                    senha = None
-                else:
-                    # Rede nova: pede senha
-                    menu_estado = 'PASSWORD_ENTRY'
-                    senha = ""
-
-                kb.clear_buffer()
-
-            elif kb.get_buffer().endswith('\x1b'):  # ESC
-                menu_estado = 'MAIN'
-                wifi_sel = 0
-                kb.clear_buffer()
-
-            time.sleep(0.1)
-
-        # ====== ESTADO: PASSWORD_ENTRY (Entrada de Senha) ======
+        # ====== PASSWORD_ENTRY: Entrada de senha ======
         elif menu_estado == 'PASSWORD_ENTRY':
-            draw_password_entry(
+            draw_virtual_keyboard(
                 draw, width, height, font,
-                ssid_sel, senha
+                vkeyboard, ssid_sel
             )
 
             disp.image(image)
             disp.show()
 
-            # Processamento de teclas
-            if kb.get_buffer().endswith('\r'):  # Enter
-                menu_estado = 'CONNECTING'
-                kb.clear_buffer()
-
-            elif kb.get_buffer().endswith('\x08'):  # Backspace
-                if senha:
-                    senha = senha[:-1]
-                kb.clear_buffer()
-
-            elif kb.get_buffer().endswith('\x1b'):  # ESC
-                menu_estado = 'WIFI_LIST'
-                senha = ""
-                kb.clear_buffer()
-
-            elif kb.get_buffer() and not kb.get_buffer().endswith(('\r', '\x08', '\x1b')):
-                # Adiciona novo caractere
-                novos_chars = kb.get_buffer()
-                for char in novos_chars:
-                    if char not in ['\r', '\x08', '\x1b', '\x1b[A', '\x1b[B']:
-                        senha += char
-                kb.clear_buffer()
-
-            time.sleep(0.1)
-
-        # ====== ESTADO: CONNECTING (Conectando) ======
+        # ====== CONNECTING: Conectando à rede ======
         elif menu_estado == 'CONNECTING':
-            # Mostra tela de "Conectando..."
-            draw_connecting_screen(draw, width, height, font, ssid_sel)
+            # Mostra "Conectando..."
+            draw.rectangle((0, 0, width, height), outline=0, fill=0)
+            draw.text((15, 20), "Conectando...", font=font, fill=255)
+            draw.text((5, 35), ssid_sel[:18], font=font, fill=255)
             disp.image(image)
             disp.show()
 
             # Tenta conectar
+            senha = vkeyboard.password if vkeyboard.password else None
             sucesso, msg = connect_to_wifi(ssid_sel, senha)
 
             # Mostra resultado
-            draw_status_screen(draw, width, height, font, sucesso, msg)
+            draw.rectangle((0, 0, width, height), outline=0, fill=0)
+            if sucesso:
+                draw.text((20, 25), "Conectado!", font=font, fill=255)
+                draw.text((10, 40), "Aguarde...", font=font, fill=255)
+            else:
+                draw.text((25, 20), "Erro!", font=font, fill=255)
+                draw.text((5, 35), msg[:20], font=font, fill=255)
+                draw.text((5, 50), "Voltando...", font=font, fill=255)
+
             disp.image(image)
             disp.show()
+            time.sleep(3)
 
-            # Aguarda antes de voltar ao menu
-            time.sleep(STATUS_DISPLAY_TIME)
-
-            # Se conectou com sucesso, atualiza lista de conhecidos
-            if sucesso:
-                get_known_wifi_ssids()  # Atualiza cache
-
-            # Volta para MAIN
-            menu_estado = 'MAIN'
-            senha = ""
-            kb.clear_buffer()
+            # Reseta e volta ao início
+            vkeyboard.reset()
+            wifi_lista = []
+            menu_estado = 'CHECK_WIFI'
 
         time.sleep(0.05)
 
 except KeyboardInterrupt:
-    print("\nPrograma encerrado pelo usuário.")
+    print("\n\nEncerrando aplicação...")
+    buttons.cleanup()
     disp.fill(0)
     disp.show()
+    print("✓ Aplicação encerrada")
 except Exception as e:
-    print(f"Erro durante execução: {e}")
+    print(f"\n✗ Erro durante execução: {e}")
+    import traceback
+    traceback.print_exc()
+    buttons.cleanup()
     disp.fill(0)
     disp.show()

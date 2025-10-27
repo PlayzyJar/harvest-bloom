@@ -13,47 +13,58 @@ def clear_display(draw, width, height):
 
 
 def draw_info_screen(draw, width, height, font, host="", ip="", wifi_status="",
-                     ssh_status="", ssh_users="", ssid=""):
+                     ssh_status="", ssh_users="", ssid="", wifi_signal=""):
     """
-    Desenha a tela principal com informações do sistema.
+    Desenha a tela principal com informações do sistema (Fase 1).
+
+    Caso Wi-Fi esteja CONECTADO, mostra:
+    - Nome do host (hostname)
+    - Endereço IP atual
+    - Nível do sinal Wi-Fi
+    - Estado do serviço SSH (ativo/inativo)
+    - Número de usuários conectados via SSH
+    - SSID da rede conectada
 
     Args:
         draw: Objeto ImageDraw
         width, height: Dimensões do display
         font: Fonte para texto
-        host, ip, wifi_status, ssh_status, ssh_users, ssid: Informações a exibir
+        host, ip, wifi_status, ssh_status, ssh_users, ssid, wifi_signal: Informações
     """
     clear_display(draw, width, height)
 
     y_pos = 2
     line_height = 9
 
-    draw.text((0, y_pos), f"Host: {host}", font=font, fill=255)
+    # Host
+    draw.text((0, y_pos), f"Host: {host[:12]}", font=font, fill=255)
     y_pos += line_height
 
-    draw.text((0, y_pos), f"IP: {ip}", font=font, fill=255)
+    # IP
+    draw.text((0, y_pos), f"IP: {ip[:15]}", font=font, fill=255)
     y_pos += line_height
 
-    draw.text((0, y_pos), f"WiFi: {wifi_status}", font=font, fill=255)
+    # Sinal Wi-Fi (novo campo da Fase 1)
+    draw.text((0, y_pos), f"Sinal: {wifi_signal[:12]}", font=font, fill=255)
     y_pos += line_height
 
+    # SSH
     draw.text((0, y_pos), f"SSH: {ssh_status}", font=font, fill=255)
     y_pos += line_height
 
+    # Usuários SSH
     draw.text((0, y_pos), f"Users: {ssh_users}", font=font, fill=255)
     y_pos += line_height
 
-    draw.text((0, y_pos), f"SSID: {ssid}", font=font, fill=255)
-
-    # Footer
-    draw.text((0, height - 8), "ESC: WiFi Menu", font=font, fill=255)
+    # SSID
+    draw.text((0, y_pos), f"SSID: {ssid[:14]}", font=font, fill=255)
 
 
 def draw_wifi_list(draw, width, height, font, wifi_list, selected_index):
     """
     Desenha lista de redes Wi-Fi com scroll e highlight.
 
-    A rede selecionada aparece com fundo invertido (mais elegante).
+    A rede selecionada aparece com fundo invertido.
     Mostra scroll indicator se houver mais redes.
 
     Args:
@@ -86,7 +97,7 @@ def draw_wifi_list(draw, width, height, font, wifi_list, selected_index):
         is_selected = (i == selected_index)
 
         if is_selected:
-            # Highlight com fundo invertido (preto no branco)
+            # Highlight com fundo invertido
             draw.rectangle(
                 (0, y_pos - 1, width - 1, y_pos + 8),
                 outline=255, fill=255
@@ -103,10 +114,6 @@ def draw_wifi_list(draw, width, height, font, wifi_list, selected_index):
 
     if scroll_end < len(wifi_list):
         draw.text((width - 6, height - 10), "v", font=font, fill=255)
-
-    # Footer
-    draw.text((0, height - 8), "↑↓ Nav  ENTER Select  ESC Back",
-              font=font, fill=255)
 
 
 def draw_password_entry(draw, width, height, font, ssid, password, show_instructions=True):

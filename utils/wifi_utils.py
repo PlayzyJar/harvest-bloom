@@ -90,7 +90,7 @@ def connect_to_wifi(ssid, senha=None):
                 ["sudo", "nmcli", "connection", "up", ssid],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=30
             )
         else:
             # Rede nova: conecta e salva config
@@ -102,7 +102,7 @@ def connect_to_wifi(ssid, senha=None):
                  "password", senha],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=60
             )
 
         if result.returncode == 0:
