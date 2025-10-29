@@ -1,12 +1,16 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from gpiozero import LED
+from gpiozero import DistanceSensor
 
 app = Flask(__name__)
 CORS(app)
 
 LED_PIN = 18   # Coloque o número BCM do GPIO que está usando
 led = LED(LED_PIN)
+
+sensor = DistanceSensor(echo=25, trigger=24, max_distance=2)
+print(f"Distância: {sensor.distance * 100:.1f} cm")
 
 @app.route('/api/led/on', methods=['POST'])
 def led_on():
@@ -22,5 +26,11 @@ def led_off():
 def led_status():
     return jsonify({'status': 'on' if led.is_lit else 'off'})
 
+@app.route('/api/ultrasonic', methods=['GET'])
+def get_ultrasonic():
+    distance_cm = sensor.distance * 100
+    return jsonify({'distance_cm': distance_cm})
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
