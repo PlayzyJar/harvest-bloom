@@ -112,6 +112,24 @@ def check_wifi_connected():
         return False, ""
 
 
+def get_ssh_user_count():
+    """
+    Obtém número real de usuários SSH conectados.
+
+    Retorna:
+        int: Número de sessões SSH ativas
+    """
+    try:
+        count = subprocess.check_output(
+            "who | grep -c 'pts/' || echo 0",
+            shell=True,
+            text=True
+        ).strip()
+        return int(count)
+    except:
+        return 0
+
+
 def get_system_info():
     """
     Coleta todas as informações do sistema para Fase 1.
@@ -165,15 +183,8 @@ def get_system_info():
     except:
         info['ssh_status'] = "Inativo"
 
-    # Usuários SSH conectados
-    try:
-        info['ssh_users'] = subprocess.check_output(
-            "who | grep -c 'pts/' || echo 0",
-            shell=True,
-            text=True
-        ).strip()
-    except:
-        info['ssh_users'] = "0"
+    # Usuários SSH (raw count)
+    info['ssh_users_raw'] = get_ssh_user_count()
 
     return info
 
@@ -182,7 +193,6 @@ def get_system_info():
 # VARIÁVEIS DE ESTADO DO MENU
 # ============================================================================
 
-# Estados: CHECK_WIFI, MAIN_CONNECTED, MAIN_DISCONNECTED, WIFI_LIST, PASSWORD_ENTRY, CONNECTING
 menu_estado = 'CHECK_WIFI'
 wifi_lista = []
 wifi_sel = 0
@@ -190,6 +200,11 @@ ssid_sel = ""
 sistema_info = {}
 last_update = 0
 UPDATE_INTERVAL = 2  # Atualiza info a cada 2 segundos
+
+# Controle de mudança de rede para SSH users
+previous_ssid = ""
+ssh_users_offset = 0  # Offset para ajustar contagem ao trocar rede
+ssh_users_at_connect = 0  # Usuários no momento da conexão
 
 
 # ============================================================================
@@ -223,33 +238,27 @@ def on_button_select():
     global menu_estado, wifi_sel, ssid_sel
 
     if menu_estado == 'MAIN_CONNECTED':
-        # Conectado: SELECT abre lista de redes (para trocar)
         menu_estado = 'WIFI_LIST'
         wifi_lista[:] = scan_wifi_networks()
         wifi_sel = 0
 
     elif menu_estado == 'MAIN_DISCONNECTED':
-        # Desconectado: SELECT abre lista de redes
         menu_estado = 'WIFI_LIST'
         wifi_lista[:] = scan_wifi_networks()
         wifi_sel = 0
 
     elif menu_estado == 'WIFI_LIST':
-        # Seleciona rede
         if wifi_lista:
             ssid_sel = wifi_lista[wifi_sel]
             known_ssids = get_known_wifi_ssids()
 
             if ssid_sel in known_ssids:
-                # Rede conhecida: conecta direto
                 menu_estado = 'CONNECTING'
             else:
-                # Rede nova: pede senha
                 vkeyboard.reset()
                 menu_estado = 'PASSWORD_ENTRY'
 
     elif menu_estado == 'PASSWORD_ENTRY':
-        # Confirma caractere
         result = vkeyboard.select_char()
         if result == 'DONE':
             menu_estado = 'CONNECTING'
@@ -260,15 +269,10 @@ def on_button_mode():
     global menu_estado
 
     if menu_estado == 'WIFI_LIST':
-        # Volta para tela principal
         menu_estado = 'CHECK_WIFI'
-
     elif menu_estado == 'PASSWORD_ENTRY':
-        # Alterna modo do teclado
         vkeyboard.toggle_mode()
-
     elif menu_estado == 'MAIN_CONNECTED':
-        # Atualiza informações manualmente
         pass
 
 
@@ -296,10 +300,22 @@ try:
 
         # ====== CHECK_WIFI: Verifica estado da conexão ======
         if menu_estado == 'CHECK_WIFI':
-            # Atualiza informações do sistema
             sistema_info = get_system_info()
 
-            # Decide próximo estado baseado na conexão
+            # Detecta mudança de rede
+            current_ssid = sistema_info.get('ssid', '')
+            if current_ssid != previous_ssid:
+                # Mudou de rede: reseta contagem de SSH users
+                if sistema_info['wifi_connected']:
+                    ssh_users_at_connect = sistema_info['ssh_users_raw']
+                    ssh_users_offset = ssh_users_at_connect
+                else:
+                    ssh_users_offset = 0
+                    ssh_users_at_connect = 0
+
+                previous_ssid = current_ssid
+
+            # Decide próximo estado
             if sistema_info['wifi_connected']:
                 menu_estado = 'MAIN_CONNECTED'
             else:
@@ -312,12 +328,24 @@ try:
             # Atualiza info periodicamente
             if current_time - last_update >= UPDATE_INTERVAL:
                 sistema_info = get_system_info()
+
+                # Detecta mudança de rede (enquanto conectado)
+                current_ssid = sistema_info.get('ssid', '')
+                if current_ssid != previous_ssid:
+                    ssh_users_at_connect = sistema_info['ssh_users_raw']
+                    ssh_users_offset = ssh_users_at_connect
+                    previous_ssid = current_ssid
+
                 last_update = current_time
 
                 # Se desconectou, muda estado
                 if not sistema_info['wifi_connected']:
                     menu_estado = 'CHECK_WIFI'
                     continue
+
+            # Calcula usuários SSH ajustados
+            ssh_users_display = max(
+                0, sistema_info['ssh_users_raw'] - ssh_users_offset)
 
             # Desenha tela de informações
             draw_info_screen(
@@ -327,7 +355,7 @@ try:
                 wifi_status=sistema_info['wifi_status'],
                 wifi_signal=sistema_info['wifi_signal'],
                 ssh_status=sistema_info['ssh_status'],
-                ssh_users=sistema_info['ssh_users'],
+                ssh_users=str(ssh_users_display),
                 ssid=sistema_info['ssid']
             )
 
@@ -341,22 +369,17 @@ try:
 
         # ====== MAIN_DISCONNECTED: Mostra lista de SSIDs ======
         elif menu_estado == 'MAIN_DISCONNECTED':
-            # Escaneia redes disponíveis
             if not wifi_lista or current_time - last_update >= 10:
                 wifi_lista = scan_wifi_networks()
                 last_update = current_time
 
             if wifi_lista:
-                # Mostra lista de redes
                 draw_wifi_list(draw, width, height, font, wifi_lista, wifi_sel)
-
-                # Footer customizado
                 draw.rectangle((0, height - 9, width, height),
                                outline=0, fill=0)
                 draw.text((0, height - 8), "L/R:Nav SEL:Conectar",
                           font=font, fill=255)
             else:
-                # Nenhuma rede encontrada
                 draw.rectangle((0, 0, width, height), outline=0, fill=0)
                 draw.text((10, 20), "Nenhuma rede", font=font, fill=255)
                 draw.text((10, 30), "encontrada", font=font, fill=255)
@@ -372,8 +395,6 @@ try:
                 wifi_lista = scan_wifi_networks()
 
             draw_wifi_list(draw, width, height, font, wifi_lista, wifi_sel)
-
-            # Footer
             draw.rectangle((0, height - 9, width, height), outline=0, fill=0)
             draw.text((0, height - 8), "L/R:Nav SEL:Ok MODE:Back",
                       font=font, fill=255)
@@ -383,17 +404,13 @@ try:
 
         # ====== PASSWORD_ENTRY: Entrada de senha ======
         elif menu_estado == 'PASSWORD_ENTRY':
-            draw_virtual_keyboard(
-                draw, width, height, font,
-                vkeyboard, ssid_sel
-            )
-
+            draw_virtual_keyboard(draw, width, height,
+                                  font, vkeyboard, ssid_sel)
             disp.image(image)
             disp.show()
 
         # ====== CONNECTING: Conectando à rede ======
         elif menu_estado == 'CONNECTING':
-            # Mostra "Conectando..."
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
             draw.text((15, 20), "Conectando...", font=font, fill=255)
             draw.text((5, 35), ssid_sel[:18], font=font, fill=255)
