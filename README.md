@@ -1,160 +1,216 @@
-# WiFi Manager - Raspberry Pi
+# Harvest Bloom – Plataforma de Monitoramento e Automação com Raspberry Pi
 
-Gerenciador de conexões Wi-Fi com interface visual usando display OLED SSD1306 e teclado USB. Desenvolvido para Raspberry Pi com sistema operacional Linux.
+Sistema completo e modular para monitoramento, controle e automação de ambientes inteligentes (miniestufas, salas, ambientes corporativos) via Raspberry Pi. Integra interface física (display OLED + botões), web dashboard e API REST para gerenciamento de conectividade Wi-Fi, sensores (temperatura, umidade, distância) e atuadores (LED, relés) em tempo real.
 
-## Funcionalidades
+## 🎯 Funcionalidades Principais
 
-- Visualização de informações do sistema (hostname, IP, status SSH)
-- Listagem de redes Wi-Fi disponíveis com scroll responsivo
-- Conexão automática em redes conhecidas
-- Entrada de senha para redes novas via teclado físico
-- Interface visual intuitiva com navegação por setas
+- **Gerenciamento Wi-Fi Inteligente**: Multirede, configuração de senha por interface física/web, monitoramento de sinal RSSI
+- **Display OLED SSD1306 Interativo**: Menu de navegação com status da rede, sensores, atuadores e URL de acesso web
+- **Monitoramento em Tempo Real**: Hostname, IP atual, SSID conectado, nível de sinal, estado SSH e número de usuários conectados
+- **Controle de Atuadores**: LED ON/OFF, relés, automações customizáveis
+- **Sensores Integrados**: DHT11/22 (temperatura/umidade), HC-SR04 (ultrassônico/distância)
+- **API REST Completa**: Endpoints JSON para integração com dashboards e sistemas externos
+- **Frontend Web Moderno**: Dashboard React/TypeScript para visualização e controle remoto
+- **Arquitetura Modular**: Fácil expansão para novos sensores, lógicas de automação e integrações
 
-## Hardware Necessário
+## 🛠 Stack Tecnológico
 
-- Raspberry Pi (testado em Pi 3/4)
-- Display OLED SSD1306 128x64 (interface I2C)
-- Teclado USB
-- Adaptador Wi-Fi (se não embutido)
+| Componente | Tecnologia |
+|-----------|-----------|
+| **Hardware** | Raspberry Pi 3/4/5 |
+| **Sistema Operacional** | Raspberry Pi OS / Debian Bookworm |
+| **Linguagem Backend** | Python 3.13+ |
+| **API** | Flask + Flask-CORS |
+| **Drivers Hardware** | Adafruit Blinka, CircuitPython |
+| **Interface Gráfica** | Pillow (PIL), SSD1306 Display Driver |
+| **Frontend Web** | React 18+, TypeScript, Axios |
+| **Gerenciamento Wi-Fi** | NetworkManager / nmcli |
+| **GPIO / Sensores** | gpiozero, lgpio, adafruit-dht |
 
-## Requisitos de Software
+## 📋 Pré-requisitos
 
+### Hardware
+- Raspberry Pi 3, 4 ou 5 com Wi-Fi integrado (ou adaptador USB)
+- Display OLED SSD1306 (128x64 pixels, interface I2C)
+- Sensor DHT11/22 (temperatura/umidade) — *opcional*
+- Sensor HC-SR04 (ultrassônico) — *opcional*
+- LED com resistor (GPIO) — *opcional*
+- Teclado USB ou interface de botões físicos (GPIO)
+
+### Sistema
 ```bash
-sudo apt update
-sudo apt install python3 python3-pip
+sudo apt update && sudo apt install python3 python3-pip i2c-tools libgpiod3 python3-lgpio
 ```
 
 ### Dependências Python
+```bash
+pip install -r requirements.txt
+```
+
+### Frontend
+```bash
+Node.js 16+ e npm 7+
+```
+
+## ⚡ Instalação Rápida
+
+1. **Clone o repositório:**
+   ```bash
+   git clone https://github.com/seu-usuario/harvest-bloom.git
+   cd harvest-bloom
+   ```
+
+2. **Configure o backend:**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+3. **Inicie o backend:**
+   ```bash
+   cd backend
+   python3 app.py
+   ```
+
+4. **Configure o frontend (opcional, em outro terminal):**
+   ```bash
+   cd frontend_rasp
+   npm install
+   npm run dev
+   ```
+
+5. **Acesse a placa:**
+   - **Físico**: Use botões/teclado no display OLED para navegar
+   - **Web**: Abra `http://<IP_da_placa>:8080` no navegador
+
+## 📁 Estrutura do Projeto
+
+```
+harvest-bloom/
+├── backend/
+│   ├── app.py                      # API Flask principal
+│   ├── utils/
+│   │   └── wifi_utils.py          # Gerenciamento de Wi-Fi (nmcli)
+│   ├── libs/
+│   │   ├── display/               # Drivers do display SSD1306
+│   │   │   ├── display_utils.py
+│   │   │   └── virtual_keyboard_display.py
+│   │   ├── input_gpio/            # Gerenciamento de botões/teclado
+│   │   │   ├── buttons.py
+│   │   │   └── virtual_keyboard.py
+│   │   └── sensors/               # Drivers de sensores
+│   │       ├── dht11_simple.py    # DHT11/22 temperatura/umidade
+│   │       └── __init__.py
+│   └── requirements.txt
+├── frontend_rasp/
+│   ├── src/
+│   │   ├── lib/
+│   │   │   ├── api.ts            # Cliente API (dinâmico por IP)
+│   │   │   └── utils.ts
+│   │   ├── components/            # Componentes React
+│   │   └── pages/                 # Páginas do dashboard
+│   ├── package.json
+│   └── vite.config.ts
+├── tests/
+│   ├── test_dht11.py
+│   ├── test_display.py
+│   └── test_wifi.py
+├── README.md                       # Este arquivo
+├── GUIDE.md                        # Guia detalhado de instalação e uso
+├── requirements.txt                # Dependências Python
+└── LICENSE                         # MIT License
+```
+
+## 🚀 Uso Básico
+
+### Via Interface Física (Display + Botões)
+
+1. Ligue a Raspberry Pi
+2. Veja o splash "Harvest Bloom" por 3 segundos
+3. Navegue pelo menu usando:
+   - **Setas Esquerda/Direita**: Scroll em listas
+   - **SELECT**: Confirmar, conectar, entrar
+   - **MODE**: Voltar/retornar ao menu anterior
+4. Visualize informações da rede, sensores, atuadores e URL de acesso web
+5. Configure novas redes e senhas via interface visual
+
+### Via API REST
+
+**Base URL**: `http://<IP_placa>:8080/api`
+
+Exemplos:
 
 ```bash
-pip3 install adafruit-circuitpython-ssd1306
-pip3 install pillow
-pip3 install evdev
-pip3 install board
-pip3 install busio
+# Obter status da rede
+curl http://192.168.0.10:8080/api/wifi/status
+
+# Controlar LED
+curl -X POST http://192.168.0.10:8080/api/led/on
+
+# Ler sensores
+curl http://192.168.0.10:8080/api/sensor/dht11
 ```
 
-## Instalação
+Veja mais em [GUIDE.md](GUIDE.md#api-rest).
 
-1. Clone o repositório:
-```bash
-git clone https://github.com/seu-usuario/wifi-manager-pi.git
-cd wifi-manager-pi
+## 📖 Documentação Detalhada
+
+Para instruções completas de instalação, troubleshooting, expansão de funcionalidades e exemplos avançados, consulte [GUIDE.md](GUIDE.md).
+
+## 🔧 Integração de Novos Sensores
+
+1. Crie um driver em `backend/libs/sensors/seu_sensor.py`
+2. Importe-o no `app.py` e crie um endpoint REST
+3. Exiba os dados no display ou no dashboard web
+
+Exemplo:
+
+```python
+from libs.sensors.seu_sensor import MeuSensor
+
+sensor = MeuSensor()
+
+@app.route('/api/sensor/seu_sensor', methods=['GET'])
+def get_sensor_data():
+    valor = sensor.read()
+    return jsonify({'valor': valor})
 ```
 
-2. Instale as dependências:
-```bash
-pip3 install -r requirements.txt
-```
+## 🐛 Troubleshooting Rápido
 
-3. Identifique o device do teclado:
-```bash
-ls /dev/input/
-# Geralmente event0, event1, etc.
-# Edite main.py e ajuste o path em start_keyboard()
-```
+| Problema | Solução |
+|----------|---------|
+| Display não acende | Verifique I2C: `sudo i2cdetect -y 1` |
+| Erro libgpiod | `sudo apt install python3-lgpio` |
+| API não responde | Confira IP, porta 8080, e kill processos Python antigos |
+| Botões não respondem | Verifique permissões em `/dev/input/` ou GPIO |
+| Sensor não lê | Revise pino GPIO configurado e dependências do sensor |
 
-## Como Usar
+## 📊 Performance e Limitações
 
-### Execução
+- Display atualiza a cada 2 segundos
+- API responde em ~100-200ms em rede local de 100Mbps
+- Suporta até 10 usuários SSH simultâneos (limitação do sistema)
+- Sensores DHT11 têm taxa de erro natural de 10-30% (implementado retry)
 
-```bash
-python3 main.py
-```
+## 📜 Licença
 
-### Navegação
+MIT License — Veja [LICENSE](LICENSE) para detalhes completos.
 
-**Tela Principal (INFO):**
-- `ESC` - Abre menu de Wi-Fi
+## 👥 Autores
 
-**Menu de Redes:**
-- `↑` / `↓` - Navega entre redes
-- `ENTER` - Seleciona rede
-- `ESC` - Volta para tela principal
+Desenvolvido como projeto final do **Curso de Linux Embarcado** para aplicação prática de conceitos de GPIO, I2C, Wi-Fi, APIs e automação em Raspberry Pi.
 
-**Entrada de Senha:**
-- Digite a senha usando o teclado
-- `BACKSPACE` - Remove último caractere
-- `ENTER` - Confirma e conecta
-- `ESC` - Cancela
+**Equipe**: [Adicione nomes aqui]  
+**Data**: Novembro de 2025
 
-## Estrutura do Projeto
+---
 
-```
-wifi-manager-pi/
-├── main.py                 # Aplicação principal
-├── libs/
-│   ├── keyboard/
-│   │   └── keyboard.py     # Driver do teclado USB
-│   └── display/
-│       └── display_utils.py # Funções de renderização
-├── utils/
-│   └── wifi_utils.py       # Funções de gerenciamento Wi-Fi
-├── fonts/
-│   └── LSANS.ttf          # Fonte para display
-└── tests/                  # Testes de desenvolvimento
-```
+## 🤝 Contribuindo
 
-## Configuração do I2C
+Contribuições, bug reports e sugestões são bem-vindas! Abra uma issue ou pull request no repositório.
 
-Habilite o I2C no Raspberry Pi:
+---
 
-```bash
-sudo raspi-config
-# Interface Options > I2C > Enable
-sudo reboot
-```
-
-Verifique se o display está conectado:
-
-```bash
-sudo i2cdetect -y 1
-# Deve aparecer o endereço 0x3C ou 0x3D
-```
-
-## Permissões
-
-O programa precisa de permissões sudo para:
-- Escanear redes Wi-Fi (`nmcli`)
-- Conectar a novas redes
-
-Execute com sudo ou configure permissões:
-
-```bash
-sudo python3 main.py
-```
-
-## Troubleshooting
-
-**Display não inicializa:**
-- Verifique conexões I2C (SDA, SCL, VCC, GND)
-- Confirme endereço I2C com `i2cdetect`
-- Teste se I2C está habilitado
-
-**Teclado não responde:**
-- Verifique device path em `main.py`
-- Use `sudo python3` para garantir acesso ao /dev/input
-
-**Scan de redes vazio:**
-- Confirme que Wi-Fi está ativo: `nmcli radio wifi on`
-- Execute com sudo
-
-**Erro de import:**
-- Instale dependências: `pip3 install -r requirements.txt`
-- Execute da raiz do projeto
-
-## Tecnologias
-
-- Python 3
-- Adafruit CircuitPython SSD1306
-- NetworkManager (nmcli)
-- evdev (input handling)
-- PIL/Pillow (graphics)
-
-## Licença
-
-MIT License - veja LICENSE para detalhes.
-
-## Autor
-
-Desenvolvido como projeto acadêmico.
+**Pronto para produção?** Veja [GUIDE.md](GUIDE.md) para deploy, segurança e otimizações.

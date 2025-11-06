@@ -2,6 +2,7 @@ import { LEDControl } from "@/components/LEDControl";
 import { UltrasonicMonitor } from "@/components/UltrasonicMonitor";
 import { ActionHistory } from "@/components/ActionHistory";
 import { Cpu, Wifi } from "lucide-react";
+import { SensorMonitor } from "@/components/SensorMonitor";
 
 const Index = () => {
   return (
@@ -14,6 +15,7 @@ const Index = () => {
             <LEDControl />
             <div className="mt-6">
               <ActionHistory />
+	      <SensorMonitor />
             </div>
           </div>
           <div className="md:col-span-2">

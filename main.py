@@ -193,6 +193,7 @@ def get_system_info():
 # VARIÁVEIS DE ESTADO DO MENU
 # ============================================================================
 
+# Estados: CHECK_WIFI, MAIN_CONNECTED, MAIN_DISCONNECTED, WIFI_LIST, PASSWORD_ENTRY, CONNECTING, SHOW_URL
 menu_estado = 'CHECK_WIFI'
 wifi_lista = []
 wifi_sel = 0
@@ -273,7 +274,9 @@ def on_button_mode():
     elif menu_estado == 'PASSWORD_ENTRY':
         vkeyboard.toggle_mode()
     elif menu_estado == 'MAIN_CONNECTED':
-        pass
+        menu_estado = 'SHOW_URL'
+    elif menu_estado == 'SHOW_URL':
+        menu_estado = 'MAIN_CONNECTED'
 
 
 # Configura callbacks dos botões
@@ -289,10 +292,26 @@ print("\n" + "="*50)
 print("SISTEMA INICIADO - Fase 1")
 print("="*50)
 
+# ============================================================================
+# Tela de apresentação Harvest Bloom
+# ============================================================================
+
+
+draw.rectangle((0, 0, width, height), outline=0, fill=0)
+text = "Harvest Bloom"
+draw.text((20, 20), text, font=font, fill=255)
+disp.image(image)
+disp.show()
+time.sleep(3)
+draw.rectangle((0, 0, width, height), outline=0, fill=0)
+disp.image(image)
+disp.show()
+
 
 # ============================================================================
 # LOOP PRINCIPAL
 # ============================================================================
+
 
 try:
     while True:
@@ -439,6 +458,17 @@ try:
             vkeyboard.reset()
             wifi_lista = []
             menu_estado = 'CHECK_WIFI'
+
+        elif menu_estado == 'SHOW_URL':
+            draw.rectangle((0, 0, width, height), outline=0, fill=0)
+            url = f"http://{sistema_info['ip']}:8080"
+
+            draw.text((0, 20),
+                      url, font=font, fill=255)
+            draw.rectangle((0, height - 9, width, height), outline=0, fill=0)
+            draw.text((0, height - 8), "MODE: Voltar", font=font, fill=255)
+            disp.image(image)
+            disp.show()
 
         time.sleep(0.05)
 
