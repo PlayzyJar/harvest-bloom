@@ -1,70 +1,165 @@
-
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Lightbulb, AlertCircle } from "lucide-react";
 
-const fetchLDR = async () => {
-  try {
-    const res = await fetch("/api/ldr");
-    const data = await res.json();
-    return data.ldr;
-  } catch {
-    return null;
+const API_BASE_URL = window.location.origin.replace(/:8080$/, ':5000') + '/api';
+
+interface LDRStatus {
+  color: string;
+  text: string;
+  intensity: "forte" | "media" | "fraca" | "escura";
+}
+
+function getLDRStatus(valor: number): LDRStatus {
+  if (valor < 50000) {
+    return { 
+      color: "#FFD700", 
+      text: "Iluminação Forte", 
+      intensity: "forte" 
+    };
   }
-};
-
-function getLDRStatus(valor: number): { color: string; text: string } {
-  if (valor < 50000) return { color: "#FFD700", text: "Iluminação Forte" };      // Amarelo brilhante
-  if (valor < 90000) return { color: "#FFA500", text: "Iluminação Média" };      // Laranja
-  if (valor < 120000) return { color: "#B197FC", text: "Iluminação Fraca" };     // Azul claro
-  return { color: "#808080", text: "Pouca Luz" };                                // Cinza escuro
+  if (valor < 90000) {
+    return { 
+      color: "#FFA500", 
+      text: "Iluminação Média", 
+      intensity: "media" 
+    };
+  }
+  if (valor < 120000) {
+    return { 
+      color: "#B197FC", 
+      text: "Iluminação Fraca", 
+      intensity: "fraca" 
+    };
+  }
+  return { 
+    color: "#808080", 
+    text: "Pouca Luz", 
+    intensity: "escura" 
+  };
 }
 
 export const SensorMonitor = () => {
   const [ldrValue, setLdrValue] = useState<number | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLDR().then(setLdrValue);
-    }, 500);
+    const fetchLDR = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/ldr`, {
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.ldr !== null && data.ldr !== undefined) {
+          setLdrValue(data.ldr);
+          setLastUpdate(new Date());
+          setError(null);
+        } else if (data.status === 'aguardando leitura') {
+          setError("Aguardando primeira leitura...");
+        }
+      } catch (err) {
+        console.error("Erro ao buscar dados do LDR:", err);
+        setError("Falha na conexão com o sensor");
+      }
+    };
+
+    fetchLDR();
+    const interval = setInterval(fetchLDR, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const status = ldrValue !== null ? getLDRStatus(ldrValue) : { color: "#808080", text: "Sem leitura" };
-  const barFill = ldrValue !== null ? Math.max(100 - ldrValue / 1500, 1) : 0; // Proporção visual invertida
+  const status = ldrValue !== null 
+    ? getLDRStatus(ldrValue) 
+    : { color: "#808080", text: "Sem leitura", intensity: "escura" as const };
+
+  // Calcula a porcentagem da barra (invertida: menos luz = mais à direita)
+  const barFill = ldrValue !== null 
+    ? Math.min(Math.max((ldrValue / 150000) * 100, 1), 100) 
+    : 0;
 
   return (
-    <div className="card bg-muted p-4 flex flex-col items-center gap-4">
-      <div className="flex items-center gap-3">
-        {/* SVG lâmpada com cor variável */}
-        <svg width="42" height="42" viewBox="0 0 42 42" fill={status.color} xmlns="http://www.w3.org/2000/svg">
-          <circle cx="21" cy="18" r="13" fill={status.color} stroke="#DDD" strokeWidth={2} />
-          <rect x="17" y="31" width="8" height="7" rx="4" fill="#BBB" />
-        </svg>
-        <div>
-          <h4 className="text-xl font-semibold">Iluminação Incidente</h4>
-          <span className="text-sm" style={{ color: status.color }}>{status.text}</span>
-        </div>
+    <Card className="bg-muted p-6 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-lg font-semibold">Sensor LDR</h4>
+        {lastUpdate && (
+          <span className="text-xs text-muted-foreground">
+            {lastUpdate.toLocaleTimeString()}
+          </span>
+        )}
       </div>
-      {/* Barra horizontal de intensidade */}
-      <div className="w-full flex flex-col gap-1">
-        <div className="w-full h-4 bg-gray-300 rounded">
-          <div
-            className="h-4 rounded transition-all"
-            style={{
-              width: `${barFill}%`,
-              background: status.color,
-              minWidth: "2%",
-            }}
-          />
+
+      {error ? (
+        <div className="flex items-center justify-center gap-2 py-4 text-yellow-600">
+          <AlertCircle className="h-5 w-5" />
+          <span className="text-sm">{error}</span>
         </div>
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Forte</span>
-          <span>Fraca</span>
-        </div>
-      </div>
-      {/* Valor lido */}
-      <div className="text-sm text-muted-foreground mt-2">
-        Valor do LDR: <span className="font-mono font-bold">{ldrValue !== null ? ldrValue : "--"}</span>
-      </div>
-    </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative">
+              <Lightbulb 
+                className="h-12 w-12 transition-all duration-300" 
+                style={{ color: status.color }}
+                fill={status.intensity === "forte" ? status.color : "none"}
+              />
+              {status.intensity === "forte" && (
+                <div 
+                  className="absolute inset-0 rounded-full blur-xl opacity-50"
+                  style={{ backgroundColor: status.color }}
+                />
+              )}
+            </div>
+            
+            <div className="flex-1">
+              <h5 className="text-xl font-semibold">Iluminação Ambiente</h5>
+              <span 
+                className="text-sm font-medium"
+                style={{ color: status.color }}
+              >
+                {status.text}
+              </span>
+            </div>
+          </div>
+
+          {/* Barra de intensidade */}
+          <div className="space-y-2">
+            <div className="relative w-full h-6 bg-gray-300 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${barFill}%`,
+                  background: `linear-gradient(90deg, ${status.color}, ${status.color}dd)`,
+                  boxShadow: `0 0 10px ${status.color}88`
+                }}
+              />
+            </div>
+            
+            <div className="flex justify-between text-xs text-muted-foreground px-1">
+              <span className="font-medium">🔆 Forte</span>
+              <span className="font-medium">🌙 Escuro</span>
+            </div>
+          </div>
+
+          {/* Valor numérico */}
+          <div className="mt-4 p-3 bg-background rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Valor do sensor:</span>
+              <span className="text-xl font-mono font-bold" style={{ color: status.color }}>
+                {ldrValue !== null ? ldrValue.toLocaleString() : "--"}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </Card>
   );
 };

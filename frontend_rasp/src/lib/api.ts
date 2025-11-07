@@ -1,54 +1,79 @@
-// const API_BASE_URL = 'http://192.168.130.166:5000/api';
+// Configuração centralizada da API
+// Detecta automaticamente a URL baseada na origem da página
+const API_BASE_URL = window.location.origin.replace(/:8080$/, ':5000') + '/api';
 
-const API_BASE_URL =
-    window.location.origin.replace(/:8080$/, ':5000') + '/api';
+// Tipos de resposta da API
+export interface LDRResponse {
+  ldr: number | null;
+  status?: string;
+}
+
+export interface DHT11Response {
+  success: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  unit_temp?: string;
+  unit_humid?: string;
+  error?: string;
+}
 
 export interface LEDStatus {
-    status: 'on' | 'off';
+  status: 'on' | 'off';
 }
 
-// LED API functions
-export const turnLedOn = async (): Promise<LEDStatus> => {
-    const response = await fetch(`${API_BASE_URL}/led/on`, {
-        method: 'POST',
-    });
-    if (!response.ok) {
-        throw new Error('Failed to turn LED on');
-    }
-    return response.json();
-};
-
-export const turnLedOff = async (): Promise<LEDStatus> => {
-    const response = await fetch(`${API_BASE_URL}/led/off`, {
-        method: 'POST',
-    });
-    if (!response.ok) {
-        throw new Error('Failed to turn LED off');
-    }
-    return response.json();
-};
-
-export const getLedStatus = async (): Promise<LEDStatus> => {
-    const response = await fetch(`${API_BASE_URL}/led/status`);
-    if (!response.ok) {
-        throw new Error('Failed to get LED status');
-    }
-    return response.json();
-};
-
-// Ultrasonic (HC-SR04) API
 export interface UltrasonicReading {
-    distance_cm: number;
+  distance_cm: number;
 }
 
-export const getUltrasonicCurrent = async (): Promise<UltrasonicReading> => {
-    const response = await fetch(`${API_BASE_URL}/ultrasonic`);
-    if (!response.ok) {
-        throw new Error('Failed to get ultrasonic reading');
-    }
+// Funções auxiliares para fazer requisições
+export const api = {
+  // LDR
+  getLDR: async (): Promise<LDRResponse> => {
+    const response = await fetch(`${API_BASE_URL}/ldr`);
+    if (!response.ok) throw new Error("Erro ao buscar dados do LDR");
     return response.json();
+  },
+
+  // DHT11
+  getDHT11: async (): Promise<DHT11Response> => {
+    const response = await fetch(`${API_BASE_URL}/sensor/dht11`);
+    if (!response.ok) throw new Error("Erro ao buscar dados do DHT11");
+    return response.json();
+  },
+
+  // LED
+  turnLedOn: async (): Promise<LEDStatus> => {
+    const response = await fetch(`${API_BASE_URL}/led/on`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Erro ao ligar LED");
+    return response.json();
+  },
+
+  turnLedOff: async (): Promise<LEDStatus> => {
+    const response = await fetch(`${API_BASE_URL}/led/off`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Erro ao desligar LED");
+    return response.json();
+  },
+
+  getLedStatus: async (): Promise<LEDStatus> => {
+    const response = await fetch(`${API_BASE_URL}/led/status`);
+    if (!response.ok) throw new Error("Erro ao buscar status do LED");
+    return response.json();
+  },
+
+  // Ultrassônico (HC-SR04)
+  getUltrasonicCurrent: async (): Promise<UltrasonicReading> => {
+    const response = await fetch(`${API_BASE_URL}/ultrasonic`);
+    if (!response.ok) throw new Error("Erro ao buscar distância");
+    return response.json();
+  },
 };
 
-// NOTE: temperature / humidity / pressure endpoints removed from API surface.
-// This front-end only uses the Ultrasonic sensor (HC-SR04). If you need the
-// other sensors again, re-add the types and functions here matching your backend.
+// Exporta também as funções individuais para compatibilidade
+export const turnLedOn = api.turnLedOn;
+export const turnLedOff = api.turnLedOff;
+export const getLedStatus = api.getLedStatus;
+export const getUltrasonicCurrent = api.getUltrasonicCurrent;
