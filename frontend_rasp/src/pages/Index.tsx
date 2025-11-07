@@ -3,6 +3,7 @@ import { UltrasonicMonitor } from "@/components/UltrasonicMonitor";
 import { ActionHistory } from "@/components/ActionHistory";
 import { Cpu, Wifi } from "lucide-react";
 import { SensorMonitor } from "@/components/SensorMonitor";
+import { DHT11Monitor } from "@/components/DHT11Monitor";
 
 const Index = () => {
   return (
@@ -13,6 +14,7 @@ const Index = () => {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="md:col-span-1">
             <LEDControl />
+            <DHT11Monitor />
             <div className="mt-6">
               <ActionHistory />
 	      <SensorMonitor />

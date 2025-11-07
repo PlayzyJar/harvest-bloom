@@ -24,7 +24,7 @@ export const SensorMonitor = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchLDR().then(setLdrValue);
-    }, 1000);
+    }, 500);
     return () => clearInterval(interval);
   }, []);
 

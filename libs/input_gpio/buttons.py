@@ -1,86 +1,78 @@
 # libs/input_gpio/buttons.py
 """
-Gerenciamento de botões GPIO para navegação e entrada de dados.
-Usa RPi.GPIO para detectar pressionamento de botões físicos.
+Gerenciamento de botões GPIO usando a biblioteca lgpio.
+Fornece leitura com debouncing e callbacks assíncronos.
+Compatível com Raspberry Pi 4/5 e sistemas modernos.
 """
 
-import RPi.GPIO as GPIO
+import lgpio
 import time
 from threading import Thread, Lock
 
 
 class ButtonManager:
     """
-    Gerencia 4 botões GPIO com debouncing e callbacks.
+    Gerencia 4 botões físicos conectados aos pinos GPIO.
+    Usa lgpio para leitura com debouncing via polling.
     """
 
-    # Pinos GPIO (BCM) - AJUSTE CONFORME SEU HARDWARE
-    PIN_LEFT = 17      # Botão esquerda
-    PIN_RIGHT = 27     # Botão direita
-    PIN_SELECT = 22    # Botão selecionar/confirmar
-    PIN_MODE = 23      # Botão modo/voltar
+    # Pinos GPIO (BCM) — ajuste conforme o hardware real
+    PIN_LEFT = 17
+    PIN_RIGHT = 27
+    PIN_SELECT = 22
+    PIN_MODE = 23
 
-    DEBOUNCE_TIME = 0.2  # 200ms de debounce
+    DEBOUNCE_TIME = 0.2  # 200ms
 
     def __init__(self):
-        """Inicializa GPIO e configura botões."""
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
+        """Inicializa GPIO, configura pinos e inicia monitoramento."""
+        self.chip = lgpio.gpiochip_open(0)  # geralmente chip 0 no RPi
 
-        # Configura todos os pinos como INPUT com pull-up
+        # Configura todos os pinos como entrada com pull-up
         for pin in [self.PIN_LEFT, self.PIN_RIGHT, self.PIN_SELECT, self.PIN_MODE]:
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            lgpio.gpio_claim_input(self.chip, pin, lgpio.SET_PULL_UP)
 
-        # Estado dos botões (para debouncing)
         self.last_press = {
-            'left': 0,
-            'right': 0,
-            'select': 0,
-            'mode': 0
+            "left": 0,
+            "right": 0,
+            "select": 0,
+            "mode": 0
+        }
+
+        self.callbacks = {
+            "left": None,
+            "right": None,
+            "select": None,
+            "mode": None
         }
 
         self.lock = Lock()
         self.running = True
-
-        # Callbacks (definidos externamente)
-        self.on_left = None
-        self.on_right = None
-        self.on_select = None
-        self.on_mode = None
 
         # Thread de monitoramento
         self.monitor_thread = Thread(target=self._monitor_loop, daemon=True)
         self.monitor_thread.start()
 
     def _monitor_loop(self):
-        """Loop de monitoramento dos botões."""
+        """Loop que monitora os botões e dispara callbacks."""
         while self.running:
             current_time = time.time()
 
-            # Verifica cada botão
-            if GPIO.input(self.PIN_LEFT) == GPIO.LOW:
-                if current_time - self.last_press['left'] > self.DEBOUNCE_TIME:
-                    self.last_press['left'] = current_time
-                    if self.on_left:
-                        self.on_left()
+            # Leitura de todos os botões
+            buttons = {
+                "left": lgpio.gpio_read(self.chip, self.PIN_LEFT),
+                "right": lgpio.gpio_read(self.chip, self.PIN_RIGHT),
+                "select": lgpio.gpio_read(self.chip, self.PIN_SELECT),
+                "mode": lgpio.gpio_read(self.chip, self.PIN_MODE),
+            }
 
-            if GPIO.input(self.PIN_RIGHT) == GPIO.LOW:
-                if current_time - self.last_press['right'] > self.DEBOUNCE_TIME:
-                    self.last_press['right'] = current_time
-                    if self.on_right:
-                        self.on_right()
-
-            if GPIO.input(self.PIN_SELECT) == GPIO.LOW:
-                if current_time - self.last_press['select'] > self.DEBOUNCE_TIME:
-                    self.last_press['select'] = current_time
-                    if self.on_select:
-                        self.on_select()
-
-            if GPIO.input(self.PIN_MODE) == GPIO.LOW:
-                if current_time - self.last_press['mode'] > self.DEBOUNCE_TIME:
-                    self.last_press['mode'] = current_time
-                    if self.on_mode:
-                        self.on_mode()
+            for name, value in buttons.items():
+                if value == 0:  # ativo em nível baixo
+                    if current_time - self.last_press[name] > self.DEBOUNCE_TIME:
+                        self.last_press[name] = current_time
+                        callback = self.callbacks[name]
+                        if callback:
+                            callback()
 
             time.sleep(0.05)  # 50ms de polling
 
@@ -89,23 +81,23 @@ class ButtonManager:
         Define funções de callback para cada botão.
 
         Args:
-            on_left: Função chamada ao pressionar esquerda
-            on_right: Função chamada ao pressionar direita
-            on_select: Função chamada ao pressionar select
-            on_mode: Função chamada ao pressionar mode
+            on_left: função chamada ao pressionar 'left'
+            on_right: função chamada ao pressionar 'right'
+            on_select: função chamada ao pressionar 'select'
+            on_mode: função chamada ao pressionar 'mode'
         """
         with self.lock:
             if on_left:
-                self.on_left = on_left
+                self.callbacks["left"] = on_left
             if on_right:
-                self.on_right = on_right
+                self.callbacks["right"] = on_right
             if on_select:
-                self.on_select = on_select
+                self.callbacks["select"] = on_select
             if on_mode:
-                self.on_mode = on_mode
+                self.callbacks["mode"] = on_mode
 
     def cleanup(self):
-        """Limpa GPIO e para monitoramento."""
+        """Encerra monitoramento e libera recursos GPIO."""
         self.running = False
         self.monitor_thread.join(timeout=1.0)
-        GPIO.cleanup()
+        lgpio.gpiochip_close(self.chip)
