@@ -1,54 +1,27 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { RefreshCcw } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-
-// Funções da API REST:
-const getPumpStatus = async () => {
-  const res = await fetch('/api/pump/status');
-  return res.json();
-};
-const turnPumpOn = async () => fetch('/api/pump/on', {method: 'POST'});
-const turnPumpOff = async () => fetch('/api/pump/off', {method: 'POST'});
-
+// PumpControl.tsx
+import { useEffect, useState } from "react";
+import { subscribeHumidity } from "@/lib/ambientStore";
+import { Card, CardHeader, CardDescription, CardContent } from "@/components/ui/card"
 export const PumpControl = () => {
-  const [pumpState, setPumpState] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [ambientHumidity, setAmbientHumidity] = useState<number | null>(null);
 
   useEffect(() => {
-    getPumpStatus().then(status => setPumpState(status.status === 'on'));
+    const unsubscribe = subscribeHumidity(setAmbientHumidity);
+    return unsubscribe;
   }, []);
 
-  const togglePump = async () => {
-    setIsLoading(true);
-    try {
-      if (!pumpState) await turnPumpOn();
-      else await turnPumpOff();
-      setPumpState(!pumpState);
-      toast({
-        title: pumpState ? "Bomba desligada" : "Bomba ligada",
-        description: `Estado alterado com sucesso às ${new Date().toLocaleTimeString()}`
-      });
-    } catch (err) {
-      toast({
-        title: "Erro",
-        description: "Falha ao controlar bomba",
-        variant: "destructive",
-      });
-    }
-    setIsLoading(false);
-  };
+  // Lógica visual: Ligada se < 35, Desligada se >= 35 ou null
+  const pumpState = ambientHumidity !== null ? ambientHumidity < 40 : false;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <RefreshCcw className="h-5 w-5" />
-          Controle da Bomba
-        </CardTitle>
+        {/* ... seu código ... */}
         <CardDescription>
-          Relé da bomba de irrigação via GPIO6
+          Relé da bomba de irrigação via GPIO6<br />
+          <span className="font-mono text-xs">
+            Umidade Atual: {ambientHumidity !== null ? `${ambientHumidity}%` : "N/A"}
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

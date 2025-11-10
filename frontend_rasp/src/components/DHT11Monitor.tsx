@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Thermometer, Droplets, AlertCircle } from "lucide-react";
+import { setHumidity } from "@/lib/ambientStore";
 
 type DHT11State = {
   temperature: number | null;
@@ -35,6 +36,7 @@ export const DHT11Monitor = () => {
         const data = await res.json();
         setSensor(data);
         setLastUpdate(new Date());
+        setHumidity(data.humidity);
       } catch (error) {
         console.error("Erro ao buscar dados do DHT11:", error);
         setSensor({ 
