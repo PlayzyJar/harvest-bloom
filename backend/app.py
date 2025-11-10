@@ -8,15 +8,20 @@ import threading
 
 # --- Configurações de pinos ---
 LED_PIN = 18
+PUMP_RELAY_PIN = 6
 TRIGGER_PIN = 24
 ECHO_PIN = 25
 LDR_PIN = 21
 DHT_PIN = board.D12
 READ_INTERVAL = 1.0
+HUMIDITY_SETPOINT = 30  # regulagem da humidade para acionar a bomba
+PUMP_MIN_OFF_TIME = 60  # tempo mínimo até a bomba poder acionar novamente
 
 # --- Inicialização do GPIO ---
 h = lgpio.gpiochip_open(0)
 lgpio.gpio_claim_output(h, LED_PIN)
+lgpio.gpio_claim_output(h, PUMP_RELAY_PIN)
+lgpio.gpio_write(h, PUMP_RELAY_PIN, 1)
 lgpio.gpio_claim_output(h, TRIGGER_PIN)
 lgpio.gpio_claim_input(h, ECHO_PIN)
 lgpio.gpio_claim_input(h, LDR_PIN)
@@ -31,8 +36,40 @@ stop_thread = False
 app = Flask(__name__)
 CORS(app)
 
+pump_last_off = 0
+pump_on = False
+
+
+def bomba_auto_control():
+    global pump_on, pump_last_off
+    while True:
+        try:
+            humid = dht_sensor.humidity
+            # Se leitura falhar, ignora este ciclo
+            if humid is None:
+                time.sleep(3)
+                continue
+            # Lógica: liga se abaixo do setpoint, desliga se acima
+            if humid < HUMIDITY_SETPOINT and not pump_on and (time.time()-pump_last_off > PUMP_MIN_OFF_TIME):
+                lgpio.gpio_write(h, PUMP_RELAY_PIN, 0)
+                pump_on = True
+                print(f"BOMBA: LIGADA (umidade={humid:.1f}%)")
+            elif humid >= HUMIDITY_SETPOINT and pump_on:
+                lgpio.gpio_write(h, PUMP_RELAY_PIN, 1)
+                pump_on = False
+                pump_last_off = time.time()
+                print(f"BOMBA: DESLIGADA (umidade={humid:.1f}%)")
+        except Exception as e:
+            print(f"Erro controle bomba: {e}")
+        time.sleep(3)  # Delay entre leituras
+
+
+t_bomba = threading.Thread(target=bomba_auto_control, daemon=True)
+t_bomba.start()
 
 # --- Função de leitura simples de LDR (RC timing) ---
+
+
 def read_ldr():
     lgpio.gpio_claim_output(h, LDR_PIN)
     lgpio.gpio_write(h, LDR_PIN, 0)
@@ -75,6 +112,28 @@ def led_off():
 def led_status():
     state = lgpio.gpio_read(h, LED_PIN)
     return jsonify({'status': 'on' if state else 'off'})
+
+
+@app.route('/api/pump/on', methods=['POST'])
+def pump_on():
+    """Liga a bomba de irrigação"""
+    lgpio.gpio_write(h, PUMP_RELAY_PIN, 1)  # LOW = LIGA relé
+    return jsonify({'status': 'on'})
+
+
+@app.route('/api/pump/off', methods=['POST'])
+def pump_off():
+    """Desliga a bomba de irrigação"""
+    lgpio.gpio_write(h, PUMP_RELAY_PIN, 0)  # HIGH = DESLIGA relé
+    return jsonify({'status': 'off'})
+
+
+@app.route('/api/pump/status', methods=['GET'])
+def pump_status():
+    """Retorna o estado atual da bomba"""
+    state = lgpio.gpio_read(h, PUMP_RELAY_PIN)
+    # Se ativo-baixo: 0=on, 1=off
+    return jsonify({'status': 'off' if state else 'on'})
 
 
 @app.route('/api/ldr', methods=['GET'])

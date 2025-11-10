@@ -4,6 +4,7 @@ import { ActionHistory } from "@/components/ActionHistory";
 import { SensorMonitor } from "@/components/SensorMonitor";
 import { DHT11Monitor } from "@/components/DHT11Monitor";
 import { Activity, Cpu } from "lucide-react";
+import { PumpControl } from  "@/components/PumpControl";
 
 const Index = () => {
   return (
@@ -29,11 +30,11 @@ const Index = () => {
           <div className="lg:col-span-1 space-y-6">
             {/* Controle do LED */}
             <LEDControl />
-            
             {/* Sensores Ambientais */}
             <div className="space-y-6">
               <DHT11Monitor />
               <SensorMonitor />
+              <PumpControl />
             </div>
           </div>
 
