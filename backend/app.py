@@ -14,8 +14,8 @@ ECHO_PIN = 25
 LDR_PIN = 21
 DHT_PIN = board.D12
 READ_INTERVAL = 1.0
-HUMIDITY_SETPOINT = 30  # regulagem da humidade para acionar a bomba
-PUMP_MIN_OFF_TIME = 60  # tempo mínimo até a bomba poder acionar novamente
+HUMIDITY_SETPOINT = 40
+
 
 # --- Inicialização do GPIO ---
 h = lgpio.gpiochip_open(0)
@@ -50,12 +50,12 @@ def bomba_auto_control():
                 time.sleep(3)
                 continue
             # Lógica: liga se abaixo do setpoint, desliga se acima
-            if humid < HUMIDITY_SETPOINT and not pump_on and (time.time()-pump_last_off > PUMP_MIN_OFF_TIME):
-                lgpio.gpio_write(h, PUMP_RELAY_PIN, 0)
+            if humid < HUMIDITY_SETPOINT and not pump_on:
+                lgpio.gpio_write(h, PUMP_RELAY_PIN, 1)
                 pump_on = True
                 print(f"BOMBA: LIGADA (umidade={humid:.1f}%)")
             elif humid >= HUMIDITY_SETPOINT and pump_on:
-                lgpio.gpio_write(h, PUMP_RELAY_PIN, 1)
+                lgpio.gpio_write(h, PUMP_RELAY_PIN, 0)
                 pump_on = False
                 pump_last_off = time.time()
                 print(f"BOMBA: DESLIGADA (umidade={humid:.1f}%)")
